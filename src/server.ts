@@ -277,23 +277,23 @@ function consumeNotification(notification: { topic: { topic: any }; data: any })
             updateUnallocatedBalance(data.tokenId, data.totalAmount, data.amountLocked)
             break;
         case 'orderbook':
-            var _minBid = undefined;
-            var _maxAsk = undefined
-            if (data.bids.length > 0) _minBid = data.bids[0][0]
-            if (data.asks.length > 0) _maxAsk = data.asks[0][0]
+            var _maxBid = undefined;
+            var _minAsk = undefined
+            if (data.bids.length > 0) _maxBid = data.bids[0][0]
+            if (data.asks.length > 0) _minAsk = data.asks[0][0]
 
-            if ((_minBid && maxBid && !maxBid.isEqualTo(_minBid)) ||
-                (!_minBid && maxBid) ||
-                (_minBid && !maxBid)) {
-                maxBid = _minBid ? new BigNumber(_minBid) : _minBid
-                console.log('max bid changed: ' + _minBid)
+            if ((_maxBid && maxBid && !maxBid.isEqualTo(_maxBid)) ||
+                (!_maxBid && maxBid) ||
+                (_maxBid && !maxBid)) {
+                maxBid = _maxBid ? new BigNumber(_maxBid) : _maxBid
+                console.log('max bid changed: ' + _maxBid)
             }
 
-            if ((_maxAsk && minAsk && !minAsk.isEqualTo(_maxAsk)) ||
-                (!_maxAsk && minAsk) ||
-                (_maxAsk && !minAsk)) {
-                minAsk = _maxAsk ? new BigNumber(_maxAsk) : _maxAsk
-                console.log('min ask changed: ' + _maxAsk)
+            if ((_minAsk && minAsk && !minAsk.isEqualTo(_minAsk)) ||
+                (!_minAsk && minAsk) ||
+                (_minAsk && !minAsk)) {
+                minAsk = _minAsk ? new BigNumber(_minAsk) : _minAsk
+                console.log('min ask changed: ' + _minAsk)
             }
 
             break;
