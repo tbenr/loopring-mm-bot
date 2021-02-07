@@ -29,7 +29,7 @@ configuration is read in `config.json` from working dirirectory. The file must f
 the bot allocates available funds with buy\sell orders with the minimum spread possible.
 
 ## TODO
-- [ ] add tests
-- [ ] allow change current orders to follow changes in order book
-- [ ] add max amount to limit the allocated fund
-- [ ] honor maximum order amounts of token configuration
+- complete test cases
+- allow change current orders to follow changes in order book
+- add max amount to limit the allocated fund
+- honor maximum order amounts of token configuration
