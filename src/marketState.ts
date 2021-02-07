@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import moment from "moment";
 import { RestClient } from "./restClient";
 import { Config, LoadableValue, Market, Notification, Order, OrderBook, Side, Token } from "./types";
-const exchange = require('./sign/exchange.js')
+import { signOrder } from './sign/exchange'
 
 export declare interface MarketState {
     on(event: 'maxBidChanged', listener: (maxBid: BigNumber | undefined) => void): this;
@@ -34,6 +34,7 @@ export class MarketState extends EventEmitter {
     public nextStorageIdbaseToken: LoadableValue<number>;
     public nextStorageIdquoteToken: LoadableValue<number>;
 
+    readonly marketMinStep: BigNumber
     readonly maxBuyPrice: BigNumber;
     readonly minSellPrice: BigNumber;
     readonly baseToken: Token;
@@ -57,6 +58,8 @@ export class MarketState extends EventEmitter {
 
         this.baseTokenUnit = new BigNumber(10).exponentiatedBy(baseToken.decimals)
         this.quoteTokenUnit = new BigNumber(10).exponentiatedBy(quoteToken.decimals)
+
+        this.marketMinStep = new BigNumber(10).pow(-this.market.precisionForPrice);
 
         this._initialized = false;
 
@@ -82,8 +85,8 @@ export class MarketState extends EventEmitter {
         return this._maxBid;
     }
 
-    updateOrderBook(version: number, orderbook: OrderBook | undefined) {
-        if (orderbook && (!this._lastOrderBookVersion || version > this._lastOrderBookVersion)) {
+    updateOrderBook(orderbook: OrderBook | undefined, version?: number) {
+        if (orderbook && (!this._lastOrderBookVersion || !version || version > this._lastOrderBookVersion)) {
             this._orderBook = orderbook;
 
             let __maxBid: string | undefined = undefined;
@@ -156,6 +159,12 @@ export class MarketState extends EventEmitter {
         }
     }
 
+    initializeTESTING(baseStorageTokenId?:number, quoteStorageTokenId?:number) {
+        this._initialized = true;
+        if(baseStorageTokenId) this.nextStorageIdbaseToken.set(baseStorageTokenId);
+        if(quoteStorageTokenId) this.nextStorageIdquoteToken.set(quoteStorageTokenId);
+    }
+
     initialize() {
         this._initialized = false;
         this.updateBaseTokenStorageId()
@@ -212,7 +221,7 @@ export class MarketState extends EventEmitter {
                 break;
             case 'orderbook':
                 if(this.market.market === notification.topic.market)
-                    this.updateOrderBook(notification.endVersion,data);
+                    this.updateOrderBook(data,notification.endVersion);
     
                 break;
         }
@@ -237,24 +246,31 @@ export class MarketState extends EventEmitter {
         let buyTokenId: string;
         let buyTokenVolume: string;
     
-        if (type === Side.Buy) {
-            buyTokenId = String(this.baseToken.tokenId);
-            sellTokenId = String(this.quoteToken.tokenId);
-            if(amount.isGreaterThan(this.quoteTokenUnallocated.value)) {
-                console.error('trying to use more than avaibable amount')
-                return undefined;
-            }
-            sellTokenVolume = this.quoteTokenUnallocated.value.toFixed();
-            buyTokenVolume = this.getCounterpartAmount(amount,price, type)
-        } else {
-            buyTokenId = String(this.quoteToken.tokenId);
-            sellTokenId = String(this.baseToken.tokenId);
-            if(amount.isGreaterThan(this.baseTokenUnallocated.value)) {
-                console.error('trying to use more than avaibable amount')
-                return undefined;
-            }
-            sellTokenVolume = this.baseTokenUnallocated.value.toFixed();
-            buyTokenVolume = this.getCounterpartAmount(amount, price, type)
+        switch(type) {
+            case Side.Buy:
+                buyTokenId = String(this.baseToken.tokenId);
+                sellTokenId = String(this.quoteToken.tokenId);
+                if(amount.isGreaterThan(this.quoteTokenUnallocated.value)) {
+                    console.error('trying to use more than avaibable amount')
+                    return undefined;
+                }
+                sellTokenVolume = this.quoteTokenUnallocated.value.toFixed();
+                buyTokenVolume = this.getCounterpartAmount(amount,price, type)
+                break;
+
+            case Side.Sell:
+                buyTokenId = String(this.quoteToken.tokenId);
+                sellTokenId = String(this.baseToken.tokenId);
+                if(amount.isGreaterThan(this.baseTokenUnallocated.value)) {
+                    console.error('trying to use more than avaibable amount')
+                    return undefined;
+                }
+                sellTokenVolume = this.baseTokenUnallocated.value.toFixed();
+                buyTokenVolume = this.getCounterpartAmount(amount, price, type)
+                break;
+            
+                default:
+                    throw new Error('inconsistent state')
         }
     
         let order: Order = {
@@ -277,12 +293,12 @@ export class MarketState extends EventEmitter {
         }
     
     
-        return exchange.signOrder(order,
+        return signOrder(order,
             {
                 secretKey: this._config.account.privateKey,
                 publicKeyX: this._config.account.publicKeyX,
                 publicKeyY: this._config.account.publicKeyY
-            }, this.baseToken, this.quoteToken);
+            });
     }
 
     get initialized(): boolean {

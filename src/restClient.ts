@@ -1,5 +1,4 @@
-import { MarketState } from "./marketState";
-import { Config, Market, Order, Token } from "./types";
+import { Config, Market, Order, OrderResult, Token } from "./types";
 const clients = require('restify-clients')
 
 export class RestClient {
@@ -100,7 +99,7 @@ export class RestClient {
         })
     }
 
-    submitOrder(order: Order) {
+    submitOrder(order: Order): Promise<OrderResult> {
         return new Promise((resolve, reject) => {
             this.client.post(
                 {
@@ -108,7 +107,7 @@ export class RestClient {
                     headers: { 'X-API-KEY': this.config.account.apiKey }
                 },
                 order,
-                (err: any, req: any, res: any, obj: any) => {
+                (err: any, req: any, res: any, obj: OrderResult) => {
                     if (err) reject(err)
                     else resolve(obj);
                 })

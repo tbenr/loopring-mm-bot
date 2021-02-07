@@ -1,7 +1,7 @@
-import * as Poseidon from './poseidon.js';
-import EdDSA from './eddsa.js';
+import * as Poseidon from './poseidon';
+import EdDSA from './eddsa';
 import { Order } from '../types';
-import { signatureToHex } from './formatter.js';
+import { signatureToHex } from './formatter';
 
 
 export function signOrder(order: Order, keyPair:any) : Order {

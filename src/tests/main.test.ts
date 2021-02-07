@@ -1,8 +1,9 @@
 import BigNumber from "bignumber.js";
-import { expect } from "chai";
+import { assert, expect } from "chai";
 import { MarketState } from "../marketState";
 import { RestClient } from "../restClient";
-import { Config, Market, Side, Token } from "../types";
+import { Strategy } from "../strategy";
+import { Config, Market, Notification, NotificationTopic, Side, Token } from "../types";
 
 let testMarket:Market =
 {
@@ -57,12 +58,12 @@ let testConfig:Config =
   "account": {
       "exchangeName": "Loopring Exchange v2",
       "exchangeAddress": "0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4",
-      "accountAddress": "0x...",
+      "accountAddress": "0x0",
       "accountId": 0,
       "apiKey": "...",
-      "publicKeyX": "0x...",
-      "publicKeyY": "0x...",
-      "privateKey": "0x..."
+      "publicKeyX": "0x0",
+      "publicKeyY": "0x0",
+      "privateKey": "0x0"
   },
   "pair": "DAI-USDT",
   "maxBuyPrice": "1.0002",
@@ -89,4 +90,90 @@ describe('Market State', function() {
       let r = ms.getCounterpartAmount(ammount,price,Side.Sell);
       expect(r).equal('330000');
     }); 
+  });
+
+let accountNotificationTopic: NotificationTopic  = {topic: 'account'}
+let orderbookNotificationTopic: NotificationTopic  = {topic: 'orderbook', market: testMarket.market}
+
+// 50
+let accountInfoNotification: Notification =
+{
+  topic: accountNotificationTopic,
+  "ts": 1584717910000,
+  "data": {
+    "accountId": 0,
+    "totalAmount": "500000000000000000000",
+    "tokenId": testBaseToken.tokenId,
+    "amountLocked": "0"
+  }
+}
+
+let orderbookNotification: Notification = 
+{
+  topic: orderbookNotificationTopic,
+  "ts": 1584717910000,
+  "endVersion": 1,
+  "data": {
+    "bids": [
+      [
+          "295.97",  //price
+          "456781000000000",  //size
+          "3015000000000",  //volume
+          "4"  //count
+      ]
+  ],
+  "asks": [
+      [
+        "298.97",
+        "456781000000000000",
+        "301500000000000",
+        "2"
+      ]
+  ]
+  }
+}
+
+  describe('Strategy', function() {
+
+    it('no orders without funds', function() {
+      let ms = new MarketState(testMarket,testBaseToken,testQuoteToken,testConfig, testRestClient);
+      ms.initializeTESTING();
+      let s = new Strategy(ms,testConfig,testRestClient)
+      s.applyStrategy();
+      expect(s.outgoingBuyOrder).to.be.undefined
+      expect(s.outgoingSellOrder).to.be.undefined
+    });
+
+    it('no orders with funds but wuthout orderbook', function() {
+      let ms = new MarketState(testMarket,testBaseToken,testQuoteToken,testConfig, testRestClient);
+      ms.initializeTESTING();
+      let s = new Strategy(ms,testConfig,testRestClient)
+      ms.consumeNotification(accountInfoNotification);
+      s.applyStrategy();
+      expect(s.outgoingBuyOrder).to.be.undefined
+      expect(s.outgoingSellOrder).to.be.undefined
+    });
+
+    it('error with funds and orderbook but no storageIds', function() {
+      let ms = new MarketState(testMarket,testBaseToken,testQuoteToken,testConfig, testRestClient);
+      ms.initializeTESTING();
+      let s = new Strategy(ms,testConfig,testRestClient)
+      ms.consumeNotification(accountInfoNotification);
+      ms.consumeNotification(orderbookNotification);
+      assert.throws(()=> {s.applyStrategy()})
+      
+      expect(s.outgoingBuyOrder).to.undefined
+      expect(s.outgoingSellOrder).to.be.undefined
+    });
+
+    it('orders generated with funds and orderbook', function() {
+      let ms = new MarketState(testMarket,testBaseToken,testQuoteToken,testConfig, testRestClient);
+      ms.initializeTESTING(1,1);
+      let s = new Strategy(ms,testConfig,testRestClient)
+      ms.consumeNotification(accountInfoNotification);
+      ms.consumeNotification(orderbookNotification);
+      s.applyStrategy();
+      expect(s.outgoingBuyOrder).to.be.undefined
+      expect(s.outgoingSellOrder).to.exist
+    });
   });

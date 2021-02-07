@@ -110,6 +110,14 @@ export interface Order {
         label?: number
 }
 
+export type OrderResultStatus = 'processing'| 'processed'| 'cancelling'| 'cancelled'| 'expired'| 'failed'
+export interface OrderResult {
+    hash : string,
+    clientOrderId : string,
+    status : OrderResultStatus,
+    isIdempotent : boolean
+}
+
 export interface Market {
     market: string,
     baseTokenId: number,
@@ -157,13 +165,14 @@ export enum Side {
     Sell = 'sell'
 }
 
+export interface NotificationTopic {
+    topic: string;
+    market?: string;
+}
 export interface Notification {
-    topic: {
-        topic: string
-        market: string
-    }
+    topic: NotificationTopic,
     ts: number,
-    startVersion: number,
-    endVersion: number,
+    startVersion?: number,
+    endVersion?: number,
     data: any
 }

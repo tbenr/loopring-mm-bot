@@ -1,9 +1,10 @@
-import { Config, LoadableValue, Market, Order, Side, Token } from './types'
-import WebSocket from 'ws'
 import BigNumber from 'bignumber.js'
 import moment from 'moment'
-import { RestClient } from './restClient'
+import WebSocket from 'ws'
 import { MarketState } from './marketState'
+import { RestClient } from './restClient'
+import { Strategy } from './strategy'
+import { Config, LoadableValue, Market, Token } from './types'
 const config = require('../config.json') as Config
 
 var tokens = new LoadableValue<Token[]>();
@@ -13,9 +14,9 @@ var restClient: RestClient;
 var wsClient: any;
 var lastPoll: moment.Moment | undefined;
 var initialized = false;
-var marketMinStep: BigNumber
 
 var marketState: MarketState;
+var strategy: Strategy;
 
 
 // market and tokens of the configured pair
@@ -30,9 +31,6 @@ if (maxBuyPrice.isNaN() || minSellPrice.isNaN()) {
     console.error('maxBuyPrice and minSellPrice MUST be configured.')
     process.exit()
 }
-
-var outgoingSellOrder: Order | undefined
-var outgoingBuyrder: Order | undefined
 
 console.log(`initializing rest client (${config.restAPIBaseUrl})`)
 restClient = new RestClient(config);
@@ -54,28 +52,6 @@ var sub = {
             "count": 2
         }
     ]
-}
-
-
-function prepareOrder(type: Side): Order | undefined {
-    let price: BigNumber;
-
-
-    if (!marketState.initialized ||
-        !marketState.maxBid ||
-        !marketState.minAsk ||
-        !marketState.quoteTokenUnallocated.isAvailable ||
-        !marketState.baseTokenUnallocated.isAvailable)
-        return undefined;
-
-    console.log(`preparing ${type} order`)
-    if (type === Side.Buy) {
-        price = BigNumber.minimum(marketState.minAsk.minus(marketMinStep), maxBuyPrice);
-        return marketState.prepareNewOrder(marketState.quoteTokenUnallocated.value,price,type)
-    } else {
-        price = BigNumber.minimum(marketState.maxBid.minus(marketMinStep), minSellPrice);
-        return marketState.prepareNewOrder(marketState.baseTokenUnallocated.value,price,type)
-    }
 }
 
 function mainpoll() {
@@ -118,9 +94,6 @@ function mainpoll() {
                     console.log(`current configured market: ${marketFound.market}`)
                     market.set(marketFound);
 
-                    marketMinStep = new BigNumber(10).pow(-market.value.precisionForPrice);
-                    console.log('market minstep: ', marketMinStep.toFixed())
-
                     console.log('markets loaded');
                 })
                 .catch(err => {
@@ -139,6 +112,10 @@ function mainpoll() {
             marketState.on('quoteTokenUnallocatedChanged', (bn) => console.log(`quoteTokenUnallocated changed: ${bn.toString()}`))
             marketState.on('maxBidChanged', (bn) => console.log(`maxBid changed: ${bn?.toString()}`))
             marketState.on('minAskChanged', (bn) => console.log(`minAsk changed: ${bn?.toString()}`))
+        }
+
+        if(!strategy) {
+            strategy = new Strategy(marketState,config,restClient)
         }
 
         marketState.initialize();
@@ -195,43 +172,8 @@ function mainpoll() {
             }
         }
 
-        if (!outgoingSellOrder &&
-            marketState.baseTokenUnallocated.isAvailable &&
-            marketState.baseTokenUnallocated.value.isGreaterThanOrEqualTo(baseToken.orderAmounts.minimum)) {
-
-            outgoingSellOrder = prepareOrder(Side.Sell)
-            console.debug('prepared sell order', outgoingSellOrder)
-            if (outgoingSellOrder)
-                restClient.submitOrder(outgoingSellOrder)
-                    .then((r: any) => {
-                        console.log(`sell order submitted - status: ${r.status} hash: ${r.hash}`)
-                    })
-                    .catch(e => {
-                        console.error(`error submitting sell order: ${e.resultInfo}`)
-                    })
-                    .finally(() => {
-                        outgoingSellOrder = undefined;
-                    })
-        }
-
-        if (!outgoingBuyrder &&
-            marketState.quoteTokenUnallocated.isAvailable &&
-            marketState.quoteTokenUnallocated.value.isGreaterThanOrEqualTo(quoteToken.orderAmounts.minimum)) {
-
-            outgoingBuyrder = prepareOrder(Side.Buy)
-            console.debug('prepared buy order', outgoingBuyrder)
-            if (outgoingBuyrder)
-                restClient.submitOrder(outgoingBuyrder)
-                    .then((r: any) => {
-                        console.log(`buy order submitted - status: ${r.status} hash: ${r.hash}`)
-                    })
-                    .catch(e => {
-                        console.error(`error submitting buy order: ${e.resultInfo}`)
-                    })
-                    .finally(() => {
-                        outgoingBuyrder = undefined;
-                    })
-        }
+        // run a poll on strategy
+        strategy.poll();
     }
 }
 
