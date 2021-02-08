@@ -108,7 +108,18 @@ export class RestClient {
                 },
                 order,
                 (err: any, req: any, res: any, obj: OrderResult) => {
-                    if (err) reject(err)
+                    if (err) {
+                        let message;
+                        if(typeof err.message === 'string') {
+                            try {
+                                message = JSON.parse(err.message);
+                            }
+                            catch(e) {
+                                message = undefined;
+                            }
+                        }
+                        reject(message?.resultInfo ? message.resultInfo : err)
+                    }
                     else resolve(obj);
                 })
         })

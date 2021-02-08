@@ -57,7 +57,7 @@ export class Strategy extends EventEmitter {
                 if (!this._marketState.maxBid ||
                     !this._marketState.baseTokenUnallocated.isAvailable) return undefined;
                 
-                price = BigNumber.minimum(this._marketState.maxBid.minus(this._marketState.marketMinStep), this._marketState.minSellPrice);
+                price = BigNumber.maximum(this._marketState.maxBid.plus(this._marketState.marketMinStep), this._marketState.minSellPrice);
                 return this._marketState.prepareNewOrder(this._marketState.baseTokenUnallocated.value,price,type)
         }
 
@@ -84,12 +84,13 @@ export class Strategy extends EventEmitter {
 
     submitOutgoingOrders() {
         if (this.outgoingSellOrder && !this._outgoingSellOrderSubmitted) {
+            this._outgoingSellOrderSubmitted = true;
             this._restClient.submitOrder(this.outgoingSellOrder)
                 .then((r: OrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Sell,r);
                 })
                 .catch(e => {
-                    console.error(`error submitting sell order: ${e.resultInfo}`)
+                    console.error('error submitting sell order: ', e)
                 })
                 .finally(() => {
                     this._outgoingSellOrder = undefined;
@@ -98,15 +99,17 @@ export class Strategy extends EventEmitter {
         }
 
         if (this._outgoingBuyOrder && !this._outgoingBuyOrderSubmitted) {
+            this._outgoingBuyOrderSubmitted = true;
             this._restClient.submitOrder(this._outgoingBuyOrder)
                 .then((r: OrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Buy,r);
                 })
                 .catch(e => {
-                    console.error(`error submitting buy order: ${e.resultInfo}`)
+                    console.error('error submitting buy order: ', e)
                 })
                 .finally(() => {
                     this._outgoingBuyOrder = undefined;
+                    this._outgoingBuyOrderSubmitted = false;
                 })
         }
 
