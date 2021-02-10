@@ -130,6 +130,9 @@ function mainpoll() {
 
         wsClient.on('error', function (e: any) {
             console.error('error connecting to websocket!', e);
+            wsClient.terminate()
+            wsClient=undefined;
+            lastPoll=undefined;
         });
 
         wsClient.on('open', function open() {
