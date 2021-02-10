@@ -2,7 +2,7 @@
 export type LoadableValueLoader<T> = () => Promise<T>;
 
 export class LoadableValue<T> {
-    private _loading:boolean;
+    private _loading: boolean;
     private _value: T | undefined = undefined
 
     constructor(value?: T) {
@@ -89,35 +89,62 @@ export interface Config {
     "reconnectWsAfterMissedPingSeconds": number
 }
 
-export interface Order {
-        exchange: string,
-        accountId: number,
-        storageId: number,
-        sellToken: {
-            tokenId: string,
-            volume: string
-        },
-        buyToken : {
-            tokenId : string,
-            volume : string
-        },
-        allOrNone: boolean,
-        fillAmountBOrS: boolean, // true => buy
-        validUntil: number,
-        maxFeeBips: number,
-        orderType: 'LIMIT_ORDER'| 'TAKER_ONLY'| 'MAKER_ONLY'|'AMM',
-        eddsaSignature?: string,
-        label?: number
+export type OrderType = 'LIMIT_ORDER' | 'TAKER_ONLY' | 'MAKER_ONLY' | 'AMM'
+
+export interface NewOrder {
+    exchange: string,
+    accountId: number,
+    storageId: number,
+    sellToken: {
+        tokenId: string,
+        volume: string
+    },
+    buyToken: {
+        tokenId: string,
+        volume: string
+    },
+    allOrNone: boolean,
+    fillAmountBOrS: boolean, // true => buy
+    validUntil: number,
+    maxFeeBips: number,
+    orderType: OrderType,
+    eddsaSignature?: string,
+    label?: number
 }
 
-export type OrderResultStatus = 'processing'| 'processed'| 'cancelling'| 'cancelled'| 'expired'| 'failed'
-export interface OrderResult {
-    hash : string,
-    clientOrderId : string,
-    status : OrderResultStatus,
-    isIdempotent : boolean
+export type OrderStatus = 'processing' | 'processed' | 'cancelling' | 'cancelled' | 'expired' | 'failed'
+export interface NewOrderResult {
+    hash: string,
+    clientOrderId: string,
+    status: OrderStatus,
+    isIdempotent: boolean
 }
 
+export interface OrderDetail {
+    hash: string,
+    clientOrderId: string,
+    side: Side,
+    market: string,
+    price: string,
+    volumes: {
+        baseAmount: string,
+        quoteAmount: string,
+        baseFilled: string,
+        quoteFilled: string,
+        fee: string
+    },
+    validity: {
+        start: number,
+        end: number
+    },
+    orderType: OrderType,
+    status: OrderStatus
+}
+
+export interface Orders {
+    totalNum: number,
+    orders: OrderDetail[]
+}
 export interface Market {
     market: string,
     baseTokenId: number,
@@ -128,6 +155,15 @@ export interface Market {
 
 }
 
+export interface Balance {
+    tokenId: number,
+    total: string,
+    locked: string,
+    pending: {
+        withdraw: string,
+        deposit: string
+    }
+}
 
 export interface Token {
     type: string,
@@ -152,7 +188,7 @@ export interface Token {
     "3015000000000",  //volume
     "4" // count
 */
-export type PriceSlot = [string,string,string,string]
+export type PriceSlot = [string, string, string, string]
 
 
 export interface OrderBook {
@@ -161,8 +197,8 @@ export interface OrderBook {
 }
 
 export enum Side {
-    Buy = 'buy',
-    Sell = 'sell'
+    Buy = 'BUY',
+    Sell = 'SELL'
 }
 
 export interface NotificationTopic {

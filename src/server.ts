@@ -18,7 +18,6 @@ var initialized = false;
 var marketState: MarketState;
 var strategy: Strategy;
 
-
 // market and tokens of the configured pair
 var market= new LoadableValue<Market>();
 var baseToken: any;

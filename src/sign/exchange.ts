@@ -1,10 +1,10 @@
 import * as Poseidon from './poseidon';
 import EdDSA from './eddsa';
-import { Order } from '../types';
+import { NewOrder } from '../types';
 import { signatureToHex } from './formatter';
 
 
-export function signOrder(order: Order, keyPair:any) : Order {
+export function signOrder(order: NewOrder, keyPair:any) : NewOrder {
 
  // Calculate hash
  const hasher = Poseidon.createHash(12, 6, 53);

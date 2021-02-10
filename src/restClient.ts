@@ -1,7 +1,18 @@
-import { Config, Market, Order, OrderResult, Token } from "./types";
+import { Balance, Config, Market, NewOrder, NewOrderResult, OrderDetail, Orders, Token } from "./types";
 const clients = require('restify-clients')
 
-export class RestClient {
+export interface IRestClient {
+    getWsKey(): Promise<string>;
+    getTokens(): Promise<Token[]>;
+    getMarkets(): Promise<Market[]>;
+    getBalances(tokenIds: number[]):Promise<Balance[]>;
+    getStorageId(tokenId: number): Promise<number>;
+    getOpenOrders(market:Market): Promise<Orders>;
+    getOrderStatus(orderHash: string):Promise<OrderDetail>;
+    submitOrder(order: NewOrder): Promise<NewOrderResult>;
+}
+
+export class RestClient implements IRestClient {
     private client: any;
     private config: Config;
 
@@ -43,25 +54,25 @@ export class RestClient {
         })
     }
 
-    getBalances(tokenIds: number[]) {
+    getBalances(tokenIds: number[]):Promise<Balance[]> {
         return new Promise((resolve, reject) => {
             this.client.get(
                 {
                     path: `/api/v3/user/balances?accountId=${this.config.account.accountId}&tokens=${tokenIds.join(',')}`,
                     headers: { 'X-API-KEY': this.config.account.apiKey }
                 },
-                (err: any, req: any, res: any, obj: any) => {
+                (err: any, req: any, res: any, obj: Balance[]) => {
                     if (err) reject(err)
                     else resolve(obj);
                 })
         })
     }
 
-    getStorageId(rokenId: any): Promise<number> {
+    getStorageId(tokenId: number): Promise<number> {
         return new Promise((resolve, reject) => {
             this.client.get(
                 {
-                    path: `/api/v3/storageId?accountId=${this.config.account.accountId}&sellTokenId=${rokenId}`,
+                    path: `/api/v3/storageId?accountId=${this.config.account.accountId}&sellTokenId=${tokenId}`,
                     headers: { 'X-API-KEY': this.config.account.apiKey }
                 },
                 (err: any, req: any, res: any, obj: { orderId: number | PromiseLike<number> }) => {
@@ -71,35 +82,35 @@ export class RestClient {
         })
     }
 
-    getOpenOrders(market:Market) {
+    getOpenOrders(market:Market): Promise<Orders> {
         return new Promise((resolve, reject) => {
             this.client.get(
                 {
                     path: `/api/v3/orders?accountId=${this.config.account.accountId}&market=${market.market}&status=processing`,
                     headers: { 'X-API-KEY': this.config.account.apiKey }
                 },
-                (err: any, req: any, res: any, obj: any) => {
+                (err: any, req: any, res: any, obj: Orders) => {
                     if (err) reject(err)
                     else resolve(obj);
                 })
         })
     }
 
-    getOrderStatus(orderHash: string) {
+    getOrderStatus(orderHash: string):Promise<OrderDetail> {
         return new Promise((resolve, reject) => {
             this.client.get(
                 {
-                    path: `/api/v3/orders?accountId=${this.config.account.accountId}&orderHash=${orderHash}`,
+                    path: `/api/v3/order?accountId=${this.config.account.accountId}&orderHash=${orderHash}`,
                     headers: { 'X-API-KEY': this.config.account.apiKey }
                 },
-                (err: any, req: any, res: any, obj: any) => {
+                (err: any, req: any, res: any, obj: OrderDetail) => {
                     if (err) reject(err)
                     else resolve(obj);
                 })
         })
     }
 
-    submitOrder(order: Order): Promise<OrderResult> {
+    submitOrder(order: NewOrder): Promise<NewOrderResult> {
         return new Promise((resolve, reject) => {
             this.client.post(
                 {
@@ -107,7 +118,7 @@ export class RestClient {
                     headers: { 'X-API-KEY': this.config.account.apiKey }
                 },
                 order,
-                (err: any, req: any, res: any, obj: OrderResult) => {
+                (err: any, req: any, res: any, obj: NewOrderResult) => {
                     if (err) {
                         let message;
                         if(typeof err.message === 'string') {

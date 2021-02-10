@@ -1,8 +1,8 @@
 import BigNumber from "bignumber.js";
 import { EventEmitter } from 'events';
 import moment from "moment";
-import { RestClient } from "./restClient";
-import { Config, LoadableValue, Market, Notification, Order, OrderBook, Side, Token } from "./types";
+import { IRestClient } from "./restClient";
+import { Config, LoadableValue, Market, Notification, NewOrder, OrderBook, Side, Token, Orders, Balance } from "./types";
 import { signOrder } from './sign/exchange'
 
 export declare interface MarketState {
@@ -14,7 +14,7 @@ export declare interface MarketState {
 }
 
 export class MarketState extends EventEmitter {
-    private _restClient: RestClient;
+    private _restClient: IRestClient;
     private _market: Market;
     private _orderBook: OrderBook | undefined;
     private _lastOrderBookVersion: number | undefined;
@@ -40,7 +40,7 @@ export class MarketState extends EventEmitter {
     readonly baseToken: Token;
     readonly quoteToken: Token;
 
-    constructor(market: Market, baseToken: Token, quoteToken: Token, config: Config, restClient: RestClient) {
+    constructor(market: Market, baseToken: Token, quoteToken: Token, config: Config, restClient: IRestClient) {
         super();
         this._config = config;
 
@@ -159,56 +159,59 @@ export class MarketState extends EventEmitter {
         }
     }
 
-    initializeTESTING(baseStorageTokenId?:number, quoteStorageTokenId?:number) {
-        this._initialized = true;
-        if(baseStorageTokenId) this.nextStorageIdbaseToken.set(baseStorageTokenId);
-        if(quoteStorageTokenId) this.nextStorageIdquoteToken.set(quoteStorageTokenId);
-    }
-
-    initialize() {
+    async initialize():Promise<boolean> {
         this._initialized = false;
-        this.updateBaseTokenStorageId()
-        this.updateQuoteTokenStorageId()
-        this.updateBalances()
-        this.updateOpenOrders()
+        await Promise.all([
+            this.updateBaseTokenStorageId(),
+            this.updateQuoteTokenStorageId(),
+            this.updateBalances(),
+            this.updateOpenOrders()
+        ])
+        return this.initialized;
     }
 
-    updateBaseTokenStorageId() {
-        this.nextStorageIdbaseToken.update(async () => {
-            return this._restClient.getStorageId(this.baseToken.tokenId)
-        }).then(s => { console.log(`baseToken StorageId updated (${s})`) })
+    async updateBaseTokenStorageId():Promise<number> {
+        const s = await this.nextStorageIdbaseToken.update(async () => {
+            return this._restClient.getStorageId(this.baseToken.tokenId);
+        });
+        console.log(`baseToken StorageId updated (${s})`);
+        return s;
     }
 
-    updateQuoteTokenStorageId() {
-        this.nextStorageIdquoteToken.update(async () => {
-            return this._restClient.getStorageId(this.quoteToken.tokenId)
-        }).then(s => { console.log(`quoteToken StorageId updated (${s})`) })
+    async updateQuoteTokenStorageId():Promise<number> {
+        const s = await this.nextStorageIdquoteToken.update(async () => {
+            return this._restClient.getStorageId(this.quoteToken.tokenId);
+        });
+        console.log(`quoteToken StorageId updated (${s})`);
+        return s;
     }
 
-    updateBalances() {
-        this._restClient.getBalances([this.baseToken.tokenId, this.quoteToken.tokenId])
-            .then((obj: any) => {
-                obj.forEach((bal: { tokenId: any; total: any; locked: any }) => {
-                    this.updateUnallocatedBalance(bal.tokenId, bal.total, bal.locked)
-                });
-            })
-            .catch(err => {
-                console.error('error updating balances', err);
-                this.quoteTokenUnallocated.unset();
-                this.baseTokenUnallocated.unset();
-            })
+    async updateBalances():Promise<Balance[]> {
+        try {
+            const obj = await this._restClient.getBalances([this.baseToken.tokenId, this.quoteToken.tokenId]);
+            obj.forEach((bal: { tokenId: any; total: any; locked: any; }) => {
+                this.updateUnallocatedBalance(bal.tokenId, bal.total, bal.locked);
+            });
+            return obj;
+        } catch (err) {
+            console.error('error updating balances', err);
+            this.quoteTokenUnallocated.unset();
+            this.baseTokenUnallocated.unset();
+            throw err;
+        }
     }
 
-    updateOpenOrders() {
-        this._restClient.getOpenOrders(this.market)
-            .then((obj: any) => {
-                this.openOrders = obj.orders;
-                console.log(`openOrders loaded (${this.openOrders.length})`);
-            })
-            .catch(err => {
-                console.error('error getting open orders', err);
-                this.openOrders = undefined;
-            })
+    async updateOpenOrders():Promise<Orders> {
+        try {
+            const obj = await this._restClient.getOpenOrders(this.market);
+            this.openOrders = obj.orders;
+            console.log(`openOrders loaded (${this.openOrders.length})`);
+            return obj;
+        } catch (err) {
+            console.error('error getting open orders', err);
+            this.openOrders = undefined;
+            throw err;
+        }
     }
 
     consumeNotification(notification: Notification) {
@@ -237,16 +240,18 @@ export class MarketState extends EventEmitter {
 
     prepareUpdateOrder(storageId: number, amount: BigNumber, price: BigNumber, type: Side) {
         // TODO
-        return this.prepareOrder(storageId,amount,price,type);
+        throw Error('not implemented')
     }
     
-    private prepareOrder(storageId: number, amount: BigNumber, price: BigNumber, type: Side): Order | undefined {
+    private prepareOrder(storageId: number, amount: BigNumber, price: BigNumber, side: Side): NewOrder | undefined {
         let sellTokenId: string;
         let sellTokenVolume: string;
         let buyTokenId: string;
         let buyTokenVolume: string;
+
+        console.log(`prepareOrder - amount: ${amount.toFixed()} price: ${price.toFixed()} side: ${side}`)
     
-        switch(type) {
+        switch(side) {
             case Side.Buy:
                 buyTokenId = String(this.baseToken.tokenId);
                 sellTokenId = String(this.quoteToken.tokenId);
@@ -255,7 +260,7 @@ export class MarketState extends EventEmitter {
                     return undefined;
                 }
                 sellTokenVolume = this.quoteTokenUnallocated.value.toFixed();
-                buyTokenVolume = this.getCounterpartAmount(amount,price, type)
+                buyTokenVolume = this.getCounterpartAmount(amount,price, side)
                 break;
 
             case Side.Sell:
@@ -266,14 +271,14 @@ export class MarketState extends EventEmitter {
                     return undefined;
                 }
                 sellTokenVolume = this.baseTokenUnallocated.value.toFixed();
-                buyTokenVolume = this.getCounterpartAmount(amount, price, type)
+                buyTokenVolume = this.getCounterpartAmount(amount, price, side)
                 break;
             
                 default:
                     throw new Error('inconsistent state')
         }
     
-        let order: Order = {
+        let order: NewOrder = {
             "exchange": this._config.account.exchangeAddress,
             "accountId": this._config.account.accountId,
             "storageId": storageId,
@@ -286,26 +291,30 @@ export class MarketState extends EventEmitter {
                 "volume": buyTokenVolume
             },
             "allOrNone": false,
-            "fillAmountBOrS": type === Side.Buy,
+            "fillAmountBOrS": side === Side.Buy,
             "validUntil": moment().add(2, 'month').utc().unix(),
             "maxFeeBips": 50,
             "orderType": "MAKER_ONLY"
         }
     
     
-        return signOrder(order,
+        order = signOrder(order,
             {
                 secretKey: this._config.account.privateKey,
                 publicKeyX: this._config.account.publicKeyX,
                 publicKeyY: this._config.account.publicKeyY
             });
+        
+        console.log(`prepareOrder - prepared ${side} order`, order)
+
+        return order;
     }
 
     get initialized(): boolean {
         if (this._initialized) return true;
 
         if (this.nextStorageIdbaseToken.isAvailable &&
-            this.nextStorageIdbaseToken.isAvailable &&
+            this.nextStorageIdquoteToken.isAvailable &&
             this.baseTokenUnallocated.isAvailable &&
             this.quoteTokenUnallocated.isAvailable) {
 

@@ -1,25 +1,25 @@
 import BigNumber from "bignumber.js";
 import { EventEmitter } from 'events';
 import { MarketState } from "./marketState";
-import { RestClient } from "./restClient";
-import { Config, Order, OrderResult, Side } from "./types";
+import { IRestClient } from "./restClient";
+import { Config, NewOrder, NewOrderResult, Side } from "./types";
 
 export declare interface Strategy {
-    on(event: 'newOrderSubmitted', listener: (order: Order, side: Side, result: OrderResult) => void): this;
+    on(event: 'newOrderSubmitted', listener: (order: NewOrder, side: Side, result: NewOrderResult) => void): this;
     on(event: string, listener: Function): this;
 }
 
 export class Strategy extends EventEmitter {
     private _marketState: MarketState
-    private _restClient: RestClient
+    private _restClient: IRestClient
     private _config: Config
 
-    private _outgoingSellOrder: Order | undefined
+    private _outgoingSellOrder: NewOrder | undefined
     private _outgoingSellOrderSubmitted: boolean
-    private _outgoingBuyOrder: Order | undefined
+    private _outgoingBuyOrder: NewOrder | undefined
     private _outgoingBuyOrderSubmitted: boolean
 
-    constructor(marketState: MarketState, config: Config, restClient: RestClient) {
+    constructor(marketState: MarketState, config: Config, restClient: IRestClient) {
         super();
 
         this._marketState = marketState;
@@ -38,13 +38,12 @@ export class Strategy extends EventEmitter {
         return this._outgoingBuyOrder;
     }
 
-    private prepareOrder(type: Side): Order | undefined {
+    private prepareOrder(type: Side): NewOrder | undefined {
         let price: BigNumber;
 
         if (!this._marketState.initialized)
             return undefined;
     
-        console.log(`preparing ${type} order`)
         switch(type) {
             case Side.Buy:
                 if (!this._marketState.minAsk ||
@@ -64,13 +63,15 @@ export class Strategy extends EventEmitter {
         throw new Error('inconsistent state')
     }
 
-    applyStrategy() {
-        if (!this.outgoingSellOrder &&
+    private applyStrategy() {
+        if (!this._marketState.initialized)
+            return undefined;
+
+        if (!this._outgoingSellOrder &&
             this._marketState.baseTokenUnallocated.isAvailable &&
             this._marketState.baseTokenUnallocated.value.isGreaterThanOrEqualTo(this._marketState.baseToken.orderAmounts.minimum)) {
 
             this._outgoingSellOrder = this.prepareOrder(Side.Sell)
-            console.debug('prepared sell order', this.outgoingSellOrder)
         }
 
         if (!this._outgoingBuyOrder &&
@@ -78,15 +79,17 @@ export class Strategy extends EventEmitter {
             this._marketState.quoteTokenUnallocated.value.isGreaterThanOrEqualTo(this._marketState.quoteToken.orderAmounts.minimum)) {
 
             this._outgoingBuyOrder = this.prepareOrder(Side.Buy)
-            console.debug('prepared buy order', this._outgoingBuyOrder)
         }
     }
 
-    submitOutgoingOrders() {
+    private submitOutgoingOrders() {
+        if (!this._marketState.initialized)
+            return undefined;
+
         if (this.outgoingSellOrder && !this._outgoingSellOrderSubmitted) {
             this._outgoingSellOrderSubmitted = true;
             this._restClient.submitOrder(this.outgoingSellOrder)
-                .then((r: OrderResult) => {
+                .then((r: NewOrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Sell,r);
                 })
                 .catch(e => {
@@ -101,7 +104,7 @@ export class Strategy extends EventEmitter {
         if (this._outgoingBuyOrder && !this._outgoingBuyOrderSubmitted) {
             this._outgoingBuyOrderSubmitted = true;
             this._restClient.submitOrder(this._outgoingBuyOrder)
-                .then((r: OrderResult) => {
+                .then((r: NewOrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Buy,r);
                 })
                 .catch(e => {

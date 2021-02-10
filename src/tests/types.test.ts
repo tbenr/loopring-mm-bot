@@ -41,12 +41,13 @@ describe('loadable value', () => {
     it('update on set', async () => {
         let v1 : LoadableValue<number> = new LoadableValue<number>(3)
         expect(v1.isAvailable).to.be.true;
-        await v1.update(() => {
+        let res = await v1.update(() => {
             expect(v1.canBeInitialized).to.be.false;
             expect(v1.isLoading).to.be.true;
             expect(v1.isAvailable).to.be.true;
             return Promise.resolve(1);
         });
+        expect(res).to.equal(1);
         expect(v1.value).to.equal(1);
         expect(v1.isAvailable).to.be.true;
         expect(v1.isLoading).to.be.false;
