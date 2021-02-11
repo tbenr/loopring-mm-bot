@@ -1,9 +1,11 @@
 import BigNumber from "bignumber.js";
-import { assert, expect } from "chai";
+import { expect } from "chai";
 import { MarketState } from "../marketState";
 import { Strategy } from "../strategy";
 import { Config, Market, Notification, NotificationTopic, Side, Token } from "../types";
 import { RestClientStub } from "./restClientStub";
+
+import _ from 'lodash';
 
 let testMarket:Market =
 {
@@ -263,9 +265,8 @@ let emptyOrderbookNotification: Notification =
       let i = await ms.initialize();
       expect(i).to.be.false
       let s = new Strategy(ms,testConfig,testRestClient)
-      s.poll();
-      expect(s.outgoingBuyOrder).to.be.undefined
-      expect(s.outgoingSellOrder).to.be.undefined
+      await s.poll();
+      expect(testRestClient.submittedOrders).to.have.lengthOf(0)  //none
     });
 
     it('empty balances - no orderbook -> no orders', async function() {
@@ -279,9 +280,11 @@ let emptyOrderbookNotification: Notification =
       expect(i).to.be.true
 
       let s = new Strategy(ms,testConfig,testRestClient)
-      s.poll();
-      expect(s.outgoingBuyOrder).to.be.undefined
-      expect(s.outgoingSellOrder).to.be.undefined
+      await s.poll();
+      expect(testRestClient.submittedOrders).to.have.lengthOf(0)  //none
+
+      expect(ms.nextStorageIdquoteToken.value).to.be.equal(2)
+      expect(ms.nextStorageIdbaseToken.value).to.be.equal(4)
     });
 
     it('empty balances - orderbook -> no orders', async function() {
@@ -298,9 +301,8 @@ let emptyOrderbookNotification: Notification =
 
       ms.consumeNotification(completeOrderbookNotification);
 
-      s.poll();
-      expect(s.outgoingBuyOrder).to.be.undefined
-      expect(s.outgoingSellOrder).to.be.undefined
+      await s.poll();
+      expect(testRestClient.submittedOrders).to.have.lengthOf(0)  //none
     });
 
     it('orders generated with funds in base and quote token and orderbook present -> SELL & BUY', async function() {
@@ -317,29 +319,38 @@ let emptyOrderbookNotification: Notification =
       let s = new Strategy(ms,testConfig,testRestClient)
       ms.consumeNotification(completeOrderbookNotification);
       ms.consumeNotification(add500DAINotification);
-      s.poll();
+      testRestClient.setBalance(testBaseToken,'600000000000000000000','100000000000000000000') // align stup with the same amount
+      await s.poll();
 
-      expect(s.outgoingBuyOrder).to.deep.include({
-        exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
-        accountId: 0,
-        storageId: 2,
-        sellToken: { tokenId: '3', volume: '50000000' },
-        buyToken: { tokenId: '5', volume: '50005000500050005000' },
-        allOrNone: false,
-        fillAmountBOrS: true,
-        orderType: 'MAKER_ONLY',
-      })
+      expect(_.some(testRestClient.submittedOrders,
+        {
+          exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
+          accountId: 0,
+          storageId: 2,
+          sellToken: { tokenId: '3', volume: '50000000' },
+          buyToken: { tokenId: '5', volume: '50005000500050005000' },
+          allOrNone: false,
+          fillAmountBOrS: true,
+          orderType: 'MAKER_ONLY',
+        }
+      )).to.be.true;
 
-      expect(s.outgoingSellOrder).to.deep.include({
-        exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
-        accountId: 0,
-        storageId: 4,
-        sellToken: { tokenId: '5', volume: '500000000000000000000' },
-        buyToken: { tokenId: '3', volume: '499950000' },
-        allOrNone: false,
-        fillAmountBOrS: false,
-        orderType: 'MAKER_ONLY'
-      })
+
+      expect(_.some(testRestClient.submittedOrders,
+        {
+          exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
+          accountId: 0,
+          storageId: 4,
+          sellToken: { tokenId: '5', volume: '500000000000000000000' },
+          buyToken: { tokenId: '3', volume: '499950000' },
+          allOrNone: false,
+          fillAmountBOrS: false,
+          orderType: 'MAKER_ONLY'
+        }
+      )).to.be.true;
+
+      expect(ms.nextStorageIdquoteToken.value).to.be.equal(4)
+      expect(ms.nextStorageIdbaseToken.value).to.be.equal(6)
     });
 
     it('buy only with maxBuyPrice hit', async function() {
@@ -356,20 +367,25 @@ let emptyOrderbookNotification: Notification =
       expect(i).to.be.true
       let s = new Strategy(ms,testConfig,testRestClient)
       ms.consumeNotification(askOnlyOrderbookNotification);
-      s.poll();
+      await s.poll();
 
-      expect(s.outgoingBuyOrder).to.deep.include({
-        exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
-        accountId: 0,
-        storageId: 2,
-        sellToken: { tokenId: '3', volume: '50000000' },
-        buyToken: { tokenId: '5', volume: '49990001999600079984' },
-        allOrNone: false,
-        fillAmountBOrS: true,
-        orderType: 'MAKER_ONLY',
-      })
+      expect(_.some(testRestClient.submittedOrders,
+        {
+          exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
+          accountId: 0,
+          storageId: 2,
+          sellToken: { tokenId: '3', volume: '50000000' },
+          buyToken: { tokenId: '5', volume: '49990001999600079984' },
+          allOrNone: false,
+          fillAmountBOrS: true,
+          orderType: 'MAKER_ONLY',
+        }
+      )).to.be.true;
 
-      expect(s.outgoingSellOrder).to.be.undefined
+      expect(testRestClient.submittedOrders).to.have.lengthOf(1)  //only one
+
+      expect(ms.nextStorageIdquoteToken.value).to.be.equal(4)
+      expect(ms.nextStorageIdbaseToken.value).to.be.equal(4)
     });
 
     it('sell only with minSellPrice hit', async function() {
@@ -386,20 +402,25 @@ let emptyOrderbookNotification: Notification =
       expect(i).to.be.true
       let s = new Strategy(ms,testConfig,testRestClient)
       ms.consumeNotification(bidsOnlyOrderbookNotification);
-      s.poll();
+      await s.poll();
 
-      expect(s.outgoingBuyOrder).to.be.undefined
+      expect(testRestClient.submittedOrders).to.have.lengthOf(1)  //only one
 
-      expect(s.outgoingSellOrder).to.deep.include({
-        exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
-        accountId: 0,
-        storageId: 4,
-        sellToken: { tokenId: '5', volume: '500000000000000000000' },
-        buyToken: { tokenId: '3', volume: '499900000' },
-        allOrNone: false,
-        fillAmountBOrS: false,
-        orderType: 'MAKER_ONLY'
-      })
+      expect(_.some(testRestClient.submittedOrders,
+        {
+          exchange: '0x0BABA1Ad5bE3a5C0a66E7ac838a129Bf948f1eA4',
+          accountId: 0,
+          storageId: 4,
+          sellToken: { tokenId: '5', volume: '500000000000000000000' },
+          buyToken: { tokenId: '3', volume: '499900000' },
+          allOrNone: false,
+          fillAmountBOrS: false,
+          orderType: 'MAKER_ONLY'
+        }
+      )).to.be.true;
+
+      expect(ms.nextStorageIdquoteToken.value).to.be.equal(2)
+      expect(ms.nextStorageIdbaseToken.value).to.be.equal(6)
     });
 
     it('empty orderbook notification', async function() {
@@ -416,10 +437,9 @@ let emptyOrderbookNotification: Notification =
       expect(i).to.be.true
       let s = new Strategy(ms,testConfig,testRestClient)
       ms.consumeNotification(emptyOrderbookNotification);
-      s.poll();
+      await s.poll();
 
-      expect(s.outgoingBuyOrder).to.be.undefined
+      expect(testRestClient.submittedOrders).to.have.lengthOf(0)  //none
 
-      expect(s.outgoingSellOrder).to.be.undefined
     });
   });

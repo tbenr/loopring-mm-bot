@@ -82,13 +82,13 @@ export class Strategy extends EventEmitter {
         }
     }
 
-    private submitOutgoingOrders() {
+    private async submitOutgoingOrders() {
         if (!this._marketState.initialized)
             return undefined;
 
         if (this.outgoingSellOrder && !this._outgoingSellOrderSubmitted) {
             this._outgoingSellOrderSubmitted = true;
-            this._restClient.submitOrder(this.outgoingSellOrder)
+            await this._marketState.submitOrder(this.outgoingSellOrder)
                 .then((r: NewOrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Sell,r);
                 })
@@ -103,7 +103,7 @@ export class Strategy extends EventEmitter {
 
         if (this._outgoingBuyOrder && !this._outgoingBuyOrderSubmitted) {
             this._outgoingBuyOrderSubmitted = true;
-            this._restClient.submitOrder(this._outgoingBuyOrder)
+            await this._marketState.submitOrder(this._outgoingBuyOrder)
                 .then((r: NewOrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Buy,r);
                 })
@@ -118,8 +118,9 @@ export class Strategy extends EventEmitter {
 
     }
 
-    poll() {
+    async poll() {
+        await this._marketState.poll()
         this.applyStrategy()
-        this.submitOutgoingOrders()
+        await this.submitOutgoingOrders()
     }
 }

@@ -88,7 +88,6 @@ export class RestClientStub implements IRestClient {
 
     getStorageId(tokenId: number): Promise<number> {
         let storageId = this.storageIds[tokenId]
-        if(storageId) this.setStorageId(tokenId,storageId+2)
         return Promise.resolve(storageId)
     }
     
@@ -108,6 +107,14 @@ export class RestClientStub implements IRestClient {
 
     submitOrder(order: NewOrder): Promise<NewOrderResult> {
         this._submittedOrders.push(order);
+
+        let storageIdToken = Number(order.buyToken.tokenId)
+        let storageId = this.storageIds[storageIdToken]
+
+        this.setStorageId(storageIdToken,storageId + 2)
+
+        console.log('resclientstub order submitted')
+
         return Promise.resolve({hash: 'hash', clientOrderId: String(order.storageId) ,status: 'processing', isIdempotent: false})
     }
 }

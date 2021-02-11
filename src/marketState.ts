@@ -2,7 +2,7 @@ import BigNumber from "bignumber.js";
 import { EventEmitter } from 'events';
 import moment from "moment";
 import { IRestClient } from "./restClient";
-import { Config, LoadableValue, Market, Notification, NewOrder, OrderBook, Side, Token, Orders, Balance } from "./types";
+import { Config, LoadableValue, Market, Notification, NewOrder, OrderBook, Side, Token, Orders, Balance, NewOrderResult } from "./types";
 import { signOrder } from './sign/exchange'
 
 export declare interface MarketState {
@@ -126,22 +126,6 @@ export class MarketState extends EventEmitter {
         } else if (tokenId === this.quoteToken.tokenId) {
             this.quoteTokenUnallocated.set(unallocated)
             this.emit('quoteTokenUnallocatedChanged', unallocated);
-        }
-    }
-
-    updateStorageId(tokenId: number, storageData: any) {
-        if (storageData?.orderId) {
-            if (tokenId === this.baseToken.tokenId)
-                this.nextStorageIdbaseToken.set(storageData.orderId)
-            else if (tokenId === this.quoteToken.tokenId)
-                this.nextStorageIdquoteToken.set(storageData.orderId)
-            console.log(`nextStorageId for ${tokenId} updated (${storageData.orderId})`)
-        } else {
-            if (tokenId === this.baseToken.tokenId) {
-                this.nextStorageIdbaseToken.unset()
-            } else if (tokenId === this.quoteToken.tokenId) {
-                this.nextStorageIdquoteToken.unset()
-            }
         }
     }
 
@@ -310,6 +294,25 @@ export class MarketState extends EventEmitter {
         return order;
     }
 
+    async submitOrder(order: NewOrder): Promise<NewOrderResult> {
+        const result = await this._restClient.submitOrder(order)
+            .then((r: NewOrderResult) => {
+                // increment storageid in advance
+                if (order.fillAmountBOrS) {
+                    //buy
+                    if(!this.nextStorageIdquoteToken.isLoading)
+                        this.nextStorageIdquoteToken.set(this.nextStorageIdquoteToken.value + 2)
+                } else {
+                    //sell
+                    if(!this.nextStorageIdbaseToken.isLoading)
+                        this.nextStorageIdbaseToken.set(this.nextStorageIdbaseToken.value + 2)
+                }
+                return r;
+            });
+        console.error('submitOrder result: ', result);
+        return result;
+    }
+
     get initialized(): boolean {
         if (this._initialized) return true;
 
@@ -323,5 +326,13 @@ export class MarketState extends EventEmitter {
         }
 
         return false;
+    }
+
+    async poll() {
+        return Promise.all([
+            this.updateBalances(),
+            this.updateQuoteTokenStorageId(),
+            this.updateBaseTokenStorageId(),
+        ])
     }
 }
