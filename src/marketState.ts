@@ -154,7 +154,8 @@ export class MarketState extends EventEmitter {
         return this.initialized;
     }
 
-    async updateBaseTokenStorageId():Promise<number> {
+    async updateBaseTokenStorageId():Promise<number|undefined> {
+        if(this.nextStorageIdbaseToken.isLoading) return undefined
         const s = await this.nextStorageIdbaseToken.update(async () => {
             return this._restClient.getStorageId(this.baseToken.tokenId);
         });
@@ -162,7 +163,8 @@ export class MarketState extends EventEmitter {
         return s;
     }
 
-    async updateQuoteTokenStorageId():Promise<number> {
+    async updateQuoteTokenStorageId():Promise<number|undefined> {
+        if(this.nextStorageIdquoteToken.isLoading) return undefined
         const s = await this.nextStorageIdquoteToken.update(async () => {
             return this._restClient.getStorageId(this.quoteToken.tokenId);
         });
