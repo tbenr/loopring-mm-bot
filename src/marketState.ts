@@ -319,7 +319,7 @@ export class MarketState extends EventEmitter {
                 }
                 return r;
             });
-        console.error('submitOrder result: ', result);
+        console.log('submitOrder result: ', result);
         return result;
     }
 
