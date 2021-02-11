@@ -121,11 +121,15 @@ export class MarketState extends EventEmitter {
     updateUnallocatedBalance(tokenId: number, total: BigNumber.Value, locked: BigNumber.Value) {
         const unallocated = new BigNumber(total).minus(locked);
         if (tokenId === this.baseToken.tokenId) {
-            this.baseTokenUnallocated.set(unallocated)
-            this.emit('baseTokenUnallocatedChanged', unallocated);
+            if(!this.baseTokenUnallocated.isAvailable || !this.baseTokenUnallocated.value.isEqualTo(unallocated)) {
+                this.baseTokenUnallocated.set(unallocated)
+                this.emit('baseTokenUnallocatedChanged', unallocated);
+            }
         } else if (tokenId === this.quoteToken.tokenId) {
-            this.quoteTokenUnallocated.set(unallocated)
-            this.emit('quoteTokenUnallocatedChanged', unallocated);
+            if(!this.quoteTokenUnallocated.isAvailable || !this.quoteTokenUnallocated.value.isEqualTo(unallocated)) {
+                this.quoteTokenUnallocated.set(unallocated)
+                this.emit('quoteTokenUnallocatedChanged', unallocated);
+            }
         }
     }
 
@@ -156,19 +160,23 @@ export class MarketState extends EventEmitter {
 
     async updateBaseTokenStorageId():Promise<number|undefined> {
         if(this.nextStorageIdbaseToken.isLoading) return undefined
+        let current = this.nextStorageIdbaseToken.isAvailable ? this.nextStorageIdbaseToken.value : undefined
         const s = await this.nextStorageIdbaseToken.update(async () => {
             return this._restClient.getStorageId(this.baseToken.tokenId);
         });
-        console.log(`baseToken StorageId updated (${s})`);
+        if(s !== current)
+            console.log(`baseToken StorageId updated (${s})`);
         return s;
     }
 
     async updateQuoteTokenStorageId():Promise<number|undefined> {
         if(this.nextStorageIdquoteToken.isLoading) return undefined
+        let current = this.nextStorageIdquoteToken.isAvailable ? this.nextStorageIdquoteToken.value : undefined
         const s = await this.nextStorageIdquoteToken.update(async () => {
             return this._restClient.getStorageId(this.quoteToken.tokenId);
         });
-        console.log(`quoteToken StorageId updated (${s})`);
+        if(s !== current)
+            console.log(`quoteToken StorageId updated (${s})`);
         return s;
     }
 
