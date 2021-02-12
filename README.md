@@ -30,6 +30,5 @@ the bot allocates available funds with buy\sell orders with the minimum spread p
 
 ## TODO
 - complete test cases
-- allow change current orders to follow changes in order book
 - add max amount to limit the allocated fund
 - honor maximum order amounts of token configuration
