@@ -179,7 +179,7 @@ function mainpoll() {
     }
 }
 
-let pollTimer = setInterval(mainpoll, 2000);
+let pollTimer = setInterval(mainpoll, 3000);
 
 
 // on close

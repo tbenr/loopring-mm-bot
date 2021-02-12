@@ -1,5 +1,5 @@
 import { IRestClient } from "../restClient";
-import { Token, Market, Balance, Orders, OrderDetail, NewOrder, NewOrderResult, Config } from "../types";
+import { Token, Market, Balance, Orders, OrderDetail, NewOrder, OrderResult, Config } from "../types";
 
 export class RestClientStub implements IRestClient {
 
@@ -11,6 +11,7 @@ export class RestClientStub implements IRestClient {
     private currentOrders: {[market: string]: OrderDetail[]};
 
     private _submittedOrders: NewOrder[]
+    private _cancelledOrders: string[]
 
     constructor(config: Config, respondBalancesEmpty:boolean = true) {
         this.config = config;
@@ -19,6 +20,7 @@ export class RestClientStub implements IRestClient {
         this.currentOrders={};
 
         this._submittedOrders=[];
+        this._cancelledOrders=[];
 
         this._respondBalancesEmpty = respondBalancesEmpty;
     }
@@ -105,7 +107,7 @@ export class RestClientStub implements IRestClient {
         throw new Error("Method not implemented.");
     }
 
-    submitOrder(order: NewOrder): Promise<NewOrderResult> {
+    submitOrder(order: NewOrder): Promise<OrderResult> {
         this._submittedOrders.push(order);
 
         let storageIdToken = Number(order.buyToken.tokenId)
@@ -116,5 +118,10 @@ export class RestClientStub implements IRestClient {
         console.log('resclientstub order submitted')
 
         return Promise.resolve({hash: 'hash', clientOrderId: String(order.storageId) ,status: 'processing', isIdempotent: false})
+    }
+
+    cancelOrder(orderHash: string): Promise<OrderResult> {
+        this._cancelledOrders.push(orderHash)
+        return Promise.resolve({hash: 'hash', clientOrderId: 'undefined' ,status: 'processing', isIdempotent: false})
     }
 }

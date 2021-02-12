@@ -2,7 +2,7 @@ import BigNumber from "bignumber.js";
 import { EventEmitter } from 'events';
 import moment from "moment";
 import { IRestClient } from "./restClient";
-import { Config, LoadableValue, Market, Notification, NewOrder, OrderBook, Side, Token, Orders, Balance, NewOrderResult } from "./types";
+import { Config, LoadableValue, Market, Notification, NewOrder, OrderBook, Side, Token, Orders, Balance, OrderResult, OrderDetail } from "./types";
 import { signOrder } from './sign/exchange'
 
 export declare interface MarketState {
@@ -20,7 +20,7 @@ export class MarketState extends EventEmitter {
     private _lastOrderBookVersion: number | undefined;
     private _maxBid: BigNumber | undefined;
     private _minAsk: BigNumber | undefined;
-    private _openOrders: any;
+    private _openOrders: LoadableValue<OrderDetail[]>;
 
     private _config: Config;
 
@@ -52,6 +52,8 @@ export class MarketState extends EventEmitter {
         this.quoteTokenUnallocated = new LoadableValue<BigNumber>();
         this.nextStorageIdbaseToken = new LoadableValue<number>();
         this.nextStorageIdquoteToken = new LoadableValue<number>();
+
+        this._openOrders = new LoadableValue<OrderDetail[]>()
 
         this.baseToken = baseToken;
         this.quoteToken = quoteToken;
@@ -110,12 +112,10 @@ export class MarketState extends EventEmitter {
         }
     }
 
-    get openOrders(): any {
-        return this._openOrders;
-    }
-
-    set openOrders(oo: any) {
-        this._openOrders = oo;
+    get openOrders(): OrderDetail[]|undefined {
+        if(this._openOrders.isAvailable)
+            return this._openOrders.value;
+        else return undefined
     }
 
     updateUnallocatedBalance(tokenId: number, total: BigNumber.Value, locked: BigNumber.Value) {
@@ -195,17 +195,12 @@ export class MarketState extends EventEmitter {
         }
     }
 
-    async updateOpenOrders():Promise<Orders> {
-        try {
-            const obj = await this._restClient.getOpenOrders(this.market);
-            this.openOrders = obj.orders;
-            console.log(`openOrders loaded (${this.openOrders.length})`);
-            return obj;
-        } catch (err) {
-            console.error('error getting open orders', err);
-            this.openOrders = undefined;
-            throw err;
-        }
+    async updateOpenOrders():Promise<OrderDetail[]|undefined> {
+        if(this._openOrders.isLoading) return undefined
+        const oo = this._openOrders.update(async () => {
+            return (await this._restClient.getOpenOrders(this.market)).orders;
+        });
+        return oo;
     }
 
     consumeNotification(notification: Notification) {
@@ -304,9 +299,9 @@ export class MarketState extends EventEmitter {
         return order;
     }
 
-    async submitOrder(order: NewOrder): Promise<NewOrderResult> {
+    async submitOrder(order: NewOrder): Promise<OrderResult> {
         const result = await this._restClient.submitOrder(order)
-            .then((r: NewOrderResult) => {
+            .then((r: OrderResult) => {
                 // increment storageid in advance
                 if (order.fillAmountBOrS) {
                     //buy
@@ -320,6 +315,12 @@ export class MarketState extends EventEmitter {
                 return r;
             });
         console.log('submitOrder result: ', result);
+        return result;
+    }
+
+    async cancelOrder(orderHash: string) {
+        const result = await this._restClient.cancelOrder(orderHash);
+        console.log('cancelOrder result: ', result);
         return result;
     }
 

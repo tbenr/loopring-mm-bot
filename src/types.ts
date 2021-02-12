@@ -113,7 +113,7 @@ export interface NewOrder {
 }
 
 export type OrderStatus = 'processing' | 'processed' | 'cancelling' | 'cancelled' | 'expired' | 'failed'
-export interface NewOrderResult {
+export interface OrderResult {
     hash: string,
     clientOrderId: string,
     status: OrderStatus,

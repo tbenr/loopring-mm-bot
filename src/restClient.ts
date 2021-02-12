@@ -1,4 +1,5 @@
-import { Balance, Config, Market, NewOrder, NewOrderResult, OrderDetail, Orders, Token } from "./types";
+import { signRestURL } from "./sign/exchange";
+import { Balance, Config, Market, NewOrder, OrderResult, OrderDetail, Orders, Token } from "./types";
 const clients = require('restify-clients')
 
 export interface IRestClient {
@@ -9,7 +10,8 @@ export interface IRestClient {
     getStorageId(tokenId: number): Promise<number>;
     getOpenOrders(market:Market): Promise<Orders>;
     getOrderStatus(orderHash: string):Promise<OrderDetail>;
-    submitOrder(order: NewOrder): Promise<NewOrderResult>;
+    submitOrder(order: NewOrder): Promise<OrderResult>;
+    cancelOrder(orderHash:string):Promise<OrderResult>;
 }
 
 export class RestClient implements IRestClient {
@@ -110,7 +112,7 @@ export class RestClient implements IRestClient {
         })
     }
 
-    submitOrder(order: NewOrder): Promise<NewOrderResult> {
+    submitOrder(order: NewOrder): Promise<OrderResult> {
         return new Promise((resolve, reject) => {
             this.client.post(
                 {
@@ -118,7 +120,45 @@ export class RestClient implements IRestClient {
                     headers: { 'X-API-KEY': this.config.account.apiKey }
                 },
                 order,
-                (err: any, req: any, res: any, obj: NewOrderResult) => {
+                (err: any, req: any, res: any, obj: OrderResult) => {
+                    if (err) {
+                        let message;
+                        if(typeof err.message === 'string') {
+                            try {
+                                message = JSON.parse(err.message);
+                            }
+                            catch(e) {
+                                message = undefined;
+                            }
+                        }
+                        reject(message?.resultInfo ? message.resultInfo : err)
+                    }
+                    else resolve(obj);
+                })
+        })
+    }
+
+    cancelOrder(orderHash:string):Promise<OrderResult> {
+        return new Promise((resolve, reject) => {
+
+            const uri = encodeURIComponent(`${this.config.restAPIBaseUrl}/api/v3/order`);
+
+            const params = `accountId=${this.config.account.accountId}&orderHash=${orderHash}`;
+
+            const signature = signRestURL('DELETE',uri,encodeURIComponent(params),{
+                secretKey: this.config.account.privateKey,
+                publicKeyX: this.config.account.publicKeyX,
+                publicKeyY: this.config.account.publicKeyY
+            });
+            this.client.del(
+                {
+                    path: `/api/v3/order?${params}`,
+                    headers: {
+                        'X-API-KEY': this.config.account.apiKey,
+                        'X-API-SIG': signature
+                    }
+                },
+                (err: any, req: any, res: any, obj: OrderResult) => {
                     if (err) {
                         let message;
                         if(typeof err.message === 'string') {

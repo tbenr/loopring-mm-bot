@@ -2,10 +2,11 @@ import BigNumber from "bignumber.js";
 import { EventEmitter } from 'events';
 import { MarketState } from "./marketState";
 import { IRestClient } from "./restClient";
-import { Config, NewOrder, NewOrderResult, Side } from "./types";
+import { signOrder } from "./sign/exchange";
+import { Config, NewOrder, OrderResult, Side } from "./types";
 
 export declare interface Strategy {
-    on(event: 'newOrderSubmitted', listener: (order: NewOrder, side: Side, result: NewOrderResult) => void): this;
+    on(event: 'newOrderSubmitted', listener: (order: NewOrder, side: Side, result: OrderResult) => void): this;
     on(event: string, listener: Function): this;
 }
 
@@ -80,7 +81,24 @@ export class Strategy extends EventEmitter {
 
             this._outgoingBuyOrder = this.prepareOrder(Side.Buy)
         }
-    }
+
+        // cancel orders if they are not on the edge of the spread
+        let openOrders = this._marketState.openOrders;
+        if(openOrders) {
+            openOrders.forEach(order => {
+                if(order.side === Side.Buy) {
+                    if(this._marketState.maxBid && new BigNumber(order.price).isGreaterThan(this._marketState.maxBid)) {
+                        this._marketState.cancelOrder(order.hash)
+                    }
+                }
+                else {
+                    if(this._marketState.minAsk && new BigNumber(order.price).isLessThan(this._marketState.minAsk)) {
+                        this._marketState.cancelOrder(order.hash)
+                    }
+                }
+            });
+        }
+     }
 
     private async submitOutgoingOrders() {
         if (!this._marketState.initialized)
@@ -89,7 +107,7 @@ export class Strategy extends EventEmitter {
         if (this.outgoingSellOrder && !this._outgoingSellOrderSubmitted) {
             this._outgoingSellOrderSubmitted = true;
             await this._marketState.submitOrder(this.outgoingSellOrder)
-                .then((r: NewOrderResult) => {
+                .then((r: OrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Sell,r);
                 })
                 .catch(e => {
@@ -104,7 +122,7 @@ export class Strategy extends EventEmitter {
         if (this._outgoingBuyOrder && !this._outgoingBuyOrderSubmitted) {
             this._outgoingBuyOrderSubmitted = true;
             await this._marketState.submitOrder(this._outgoingBuyOrder)
-                .then((r: NewOrderResult) => {
+                .then((r: OrderResult) => {
                     this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Buy,r);
                 })
                 .catch(e => {
