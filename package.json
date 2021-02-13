@@ -5,7 +5,8 @@
   "main": "build/server.js",
   "scripts": {
     "start": "tsc && node build/server.js",
-    "test": "mocha -r ts-node/register src/tests/**/*.test.ts"
+    "test": "mocha -r ts-node/register src/tests/**/*.test.ts",
+    "build": "tsc -p ."
   },
   "author": "",
   "license": "ISC",

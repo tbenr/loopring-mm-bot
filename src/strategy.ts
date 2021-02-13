@@ -39,26 +39,45 @@ export class Strategy extends EventEmitter {
         return this._outgoingBuyOrder;
     }
 
+    private calculateTargetPrice(side: Side): BigNumber | undefined {
+        switch (side) {
+            case Side.Buy:
+                if (this._marketState.minAsk) {
+                    return BigNumber.minimum(
+                        this._marketState.minAsk.minus(this._marketState.marketMinStep),
+                        this._marketState.maxBuyPrice
+                    );
+                }
+                break;
+            case Side.Sell:
+                if (this._marketState.maxBid) {
+                    return BigNumber.maximum(
+                        this._marketState.maxBid.plus(this._marketState.marketMinStep),
+                        this._marketState.minSellPrice
+                    );
+                }
+                break;
+        }
+        return undefined;
+    }
+
     private prepareOrder(type: Side): NewOrder | undefined {
-        let price: BigNumber;
+        let price: BigNumber|undefined;
 
         if (!this._marketState.initialized)
             return undefined;
-    
-        switch(type) {
+
+        price = this.calculateTargetPrice(type)
+        if(price === undefined) return undefined
+
+        switch (type) {
             case Side.Buy:
-                if (!this._marketState.minAsk ||
-                    !this._marketState.quoteTokenUnallocated.isAvailable) return undefined;
-    
-                price = BigNumber.minimum(this._marketState.minAsk.minus(this._marketState.marketMinStep), this._marketState.maxBuyPrice);
-                return this._marketState.prepareNewOrder(this._marketState.quoteTokenUnallocated.value,price,type)
-            
+                if (!this._marketState.quoteTokenUnallocated.isAvailable) return undefined;
+                return this._marketState.prepareNewOrder(this._marketState.quoteTokenUnallocated.value, price, type)
+
             case Side.Sell:
-                if (!this._marketState.maxBid ||
-                    !this._marketState.baseTokenUnallocated.isAvailable) return undefined;
-                
-                price = BigNumber.maximum(this._marketState.maxBid.plus(this._marketState.marketMinStep), this._marketState.minSellPrice);
-                return this._marketState.prepareNewOrder(this._marketState.baseTokenUnallocated.value,price,type)
+                if (!this._marketState.baseTokenUnallocated.isAvailable) return undefined;
+                return this._marketState.prepareNewOrder(this._marketState.baseTokenUnallocated.value, price, type)
         }
 
         throw new Error('inconsistent state')
@@ -84,21 +103,23 @@ export class Strategy extends EventEmitter {
 
         // cancel orders if they are not on the edge of the spread
         let openOrders = this._marketState.openOrders;
-        if(openOrders) {
+        let buyTargetPrice = this.calculateTargetPrice(Side.Buy)
+        let sellTargetPrice = this.calculateTargetPrice(Side.Sell)
+        if (openOrders) {
             openOrders.forEach(order => {
-                if(order.side === Side.Buy) {
-                    if(this._marketState.maxBid && new BigNumber(order.price).isGreaterThan(this._marketState.maxBid)) {
+                if (order.side === Side.Buy) {
+                    if (buyTargetPrice && new BigNumber(order.price).isLessThan(buyTargetPrice)) {
                         this._marketState.cancelOrder(order.hash)
                     }
                 }
                 else {
-                    if(this._marketState.minAsk && new BigNumber(order.price).isLessThan(this._marketState.minAsk)) {
+                    if (sellTargetPrice && new BigNumber(order.price).isGreaterThan(sellTargetPrice)) {
                         this._marketState.cancelOrder(order.hash)
                     }
                 }
             });
         }
-     }
+    }
 
     private async submitOutgoingOrders() {
         if (!this._marketState.initialized)
@@ -108,7 +129,7 @@ export class Strategy extends EventEmitter {
             this._outgoingSellOrderSubmitted = true;
             await this._marketState.submitOrder(this.outgoingSellOrder)
                 .then((r: OrderResult) => {
-                    this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Sell,r);
+                    this.emit('newOrderSubmitted', this.outgoingSellOrder, Side.Sell, r);
                 })
                 .catch(e => {
                     console.error('error submitting sell order: ', e)
@@ -123,7 +144,7 @@ export class Strategy extends EventEmitter {
             this._outgoingBuyOrderSubmitted = true;
             await this._marketState.submitOrder(this._outgoingBuyOrder)
                 .then((r: OrderResult) => {
-                    this.emit('newOrderSubmitted', this.outgoingSellOrder,Side.Buy,r);
+                    this.emit('newOrderSubmitted', this.outgoingSellOrder, Side.Buy, r);
                 })
                 .catch(e => {
                     console.error('error submitting buy order: ', e)
