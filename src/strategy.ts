@@ -107,6 +107,7 @@ export class Strategy extends EventEmitter {
         let sellTargetPrice = this.calculateTargetPrice(Side.Sell)
         if (openOrders) {
             openOrders.forEach(order => {
+                if(order.status !== 'processing') return;
                 if (order.side === Side.Buy) {
                     if (buyTargetPrice && new BigNumber(order.price).isLessThan(buyTargetPrice)) {
                         this._marketState.cancelOrder(order.hash)
