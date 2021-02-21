@@ -2,8 +2,8 @@ import BigNumber from "bignumber.js";
 import { EventEmitter } from 'events';
 import moment from "moment";
 import { IRestClient } from "./restClient";
-import { Config, LoadableValue, Market, Notification, NewOrder, OrderBook, Side, Token, Orders, Balance, OrderResult, OrderDetail } from "./types";
-import { signOrder } from './sign/exchange'
+import { signOrder } from './sign/exchange';
+import { Config, LoadableValue, Market, NewOrder, Notification, OrderBook, OrderDetail, OrderResult, Side, Token } from "./types";
 
 export declare interface MarketState {
     on(event: 'maxBidChanged', listener: (maxBid: BigNumber | undefined) => void): this;
@@ -118,19 +118,22 @@ export class MarketState extends EventEmitter {
         else return undefined
     }
 
-    updateUnallocatedBalance(tokenId: number, total: BigNumber.Value, locked: BigNumber.Value) {
+    updateUnallocatedBalance(tokenId: number, total: BigNumber.Value, locked: BigNumber.Value):boolean {
         const unallocated = new BigNumber(total).minus(locked);
         if (tokenId === this.baseToken.tokenId) {
             if(!this.baseTokenUnallocated.isAvailable || !this.baseTokenUnallocated.value.isEqualTo(unallocated)) {
                 this.baseTokenUnallocated.set(unallocated)
                 this.emit('baseTokenUnallocatedChanged', unallocated);
+                return true;
             }
         } else if (tokenId === this.quoteToken.tokenId) {
             if(!this.quoteTokenUnallocated.isAvailable || !this.quoteTokenUnallocated.value.isEqualTo(unallocated)) {
                 this.quoteTokenUnallocated.set(unallocated)
                 this.emit('quoteTokenUnallocatedChanged', unallocated);
+                return true;
             }
         }
+        return false;
     }
 
     getCounterpartAmount(amount: BigNumber, price: BigNumber, type: Side): string {
@@ -180,13 +183,14 @@ export class MarketState extends EventEmitter {
         return s;
     }
 
-    async updateBalances():Promise<Balance[]> {
+    async updateBalances():Promise<boolean> {
         try {
             const obj = await this._restClient.getBalances([this.baseToken.tokenId, this.quoteToken.tokenId]);
+            let changed = false;
             obj.forEach((bal: { tokenId: any; total: any; locked: any; }) => {
-                this.updateUnallocatedBalance(bal.tokenId, bal.total, bal.locked);
+                changed = this.updateUnallocatedBalance(bal.tokenId, bal.total, bal.locked) || changed;
             });
-            return obj;
+            return changed;
         } catch (err) {
             console.error('error updating balances', err);
             this.quoteTokenUnallocated.unset();
@@ -203,13 +207,15 @@ export class MarketState extends EventEmitter {
         return oo;
     }
 
-    consumeNotification(notification: Notification) {
+    async consumeNotification(notification: Notification) {
         var topic = notification.topic.topic;
         var data = notification.data;
     
         switch (topic) {
             case 'account':
-                this.updateUnallocatedBalance(data.tokenId, data.totalAmount, data.amountLocked)
+                if(this.updateUnallocatedBalance(data.tokenId, data.totalAmount, data.amountLocked)) {
+                    await this.updateOpenOrders()
+                }
                 break;
             case 'orderbook':
                 if(this.market.market === notification.topic.market)
@@ -342,8 +348,9 @@ export class MarketState extends EventEmitter {
     async poll() {
         return Promise.all([
             this.updateBalances(),
+            this.updateOpenOrders(),
             this.updateQuoteTokenStorageId(),
             this.updateBaseTokenStorageId(),
-        ])
+        ]);
     }
 }
