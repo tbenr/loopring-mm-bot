@@ -127,6 +127,7 @@ function mainpoll() {
         console.log(`connecting websocket... (${config.wsBaseUrl})`);
 
         wsClient = new WebSocket(`${config.wsBaseUrl}/v3/ws?wsApiKey=${wsApiKey.value}`);
+        lastPoll = moment(); // set lastPoll to now, so if we are not able to connect, will retry in any case
 
         wsClient.on('error', function (e: any) {
             console.error('error connecting to websocket!', e);
@@ -165,7 +166,7 @@ function mainpoll() {
         if (lastPoll) {
             var d = moment().diff(lastPoll, 'seconds');
             if (d > config.reconnectWsAfterMissedPingSeconds) {
-                console.warn(`last websocket ping received more than ${config.reconnectWsAfterMissedPingSeconds} ago. Reconnecting...`);
+                console.warn(`last websocket ping received more than ${config.reconnectWsAfterMissedPingSeconds}s ago. Reconnecting...`);
                 wsClient.terminate();
                 lastPoll = undefined;
                 wsClient = undefined;

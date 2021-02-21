@@ -2,7 +2,6 @@ import BigNumber from "bignumber.js";
 import { EventEmitter } from 'events';
 import { MarketState } from "./marketState";
 import { IRestClient } from "./restClient";
-import { signOrder } from "./sign/exchange";
 import { Config, NewOrder, OrderResult, Side } from "./types";
 
 export declare interface Strategy {
